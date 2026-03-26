@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+BOOKING_REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BOOKING_PYTHONPATH="$BOOKING_REPO/src:$BOOKING_REPO/.vendor"
+
+if [[ -n "${PYTHONPATH:-}" ]]; then
+    export PYTHONPATH="$BOOKING_PYTHONPATH:$PYTHONPATH"
+else
+    export PYTHONPATH="$BOOKING_PYTHONPATH"
+fi
+
+if command -v python3 >/dev/null 2>&1; then
+    exec python3 -m booking_cli "$@"
+fi
+
+if command -v python >/dev/null 2>&1; then
+    exec python -m booking_cli "$@"
+fi
+
+printf '%s\n' "booking-cli: Python was not found on PATH. This launcher expects \`python3 -m booking_cli\` to work." >&2
+exit 1

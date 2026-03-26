@@ -1,0 +1,315 @@
+Build a production-grade, agent-friendly Python CLI for Booking.com hotel search using the internal GraphQL API approach, not browser automation.
+
+  Core product requirement:
+  The CLI must hide all Booking.com internal machinery from the user. CSRF handling, token refresh, GraphQL payloads, headers, referer construction,
+  destination metadata lookup, and request retries are implementation details. The user should not have to think about any of that.
+
+  What “just works” means:
+  - user provides destination, dates, guests, and optional filters
+  - CLI handles search URL construction, CSRF extraction, GraphQL POST, retry on 401/403, parsing, and formatting automatically
+  - no manual token management
+  - no browser automation
+  - no prompts
+  - no update steps required just to run a normal search
+
+  Primary UX target:
+  A normal user should be able to run:
+
+  `booking-hotels search --destination "Paris" --checkin 2026-04-01 --checkout 2026-04-03 --adults 2 --rooms 1`
+
+  and get results without knowing anything about CSRF, GraphQL, internal destination IDs, or Booking frontend internals.
+
+  JSON mode should be equally straightforward:
+
+  `booking-hotels --json search --destination "Paris" --checkin 2026-04-01 --checkout 2026-04-03 --adults 2 --rooms 1`
+
+  Context and direction:
+  - Build it from scratch.
+  - Primary backend approach: Booking.com’s internal GraphQL endpoint at `https://www.booking.com/dml/graphql`.
+  - The working flow to implement is:
+    1. Fetch a Booking.com search page with `httpx` to obtain a CSRF token.
+    2. Extract the token from HTML via regex like `b_csrf_token: 'VALUE'`.
+    3. POST a GraphQL request to `/dml/graphql` with the required headers and variables.
+    4. Parse the JSON response into a stable CLI output shape.
+  - Use `httpx` with HTTP/2.
+  - Do not use Playwright, Selenium, or any browser automation.
+  - Do not add proxy rotation, CAPTCHA bypassing, or anti-bot evasion. If Booking blocks requests, fail clearly and explain what happened.
+  - Treat all third-party blog posts and OSS examples as hints only. The live endpoint and live response shape are the source of truth.
+
+  Quality bar:
+  Match the same level of polish as a good MCP-backed CLI:
+  - predictable command names
+  - predictable output
+  - no hidden side effects
+  - one command does one thing
+  - human-readable default output
+  - stable `--json` output for scripts/agents
+  - proper exit codes
+  - actionable stderr errors
+  - minimal dependencies
+  - no interactive prompts unless explicitly requested
+
+  Tech stack:
+  - Python 3.11+
+  - `click` for CLI parsing
+  - `rich` for terminal rendering
+  - `httpx[http2]` for network calls
+  - stdlib `tomllib` for config if using TOML
+  - Prefer stdlib `unittest` unless the repo already uses `pytest`
+
+  Important constraints:
+  - This GraphQL schema is internal and may change periodically.
+  - Isolate the brittle parts:
+    - CSRF extraction
+    - GraphQL query document
+    - request builder
+    - response parser
+    - destination resolution
+  - Make it easy to update if Booking changes field names or the query document.
+  - If a live 401/403 happens, refresh the CSRF token and retry once. If it still fails, exit non-zero with a useful error.
+  - Respect Booking’s result limits. If offset-based pagination tops out at 1000 results, enforce that locally.
+  - Do not expose Booking internal concepts unless needed for advanced/debug use.
+
+  Required implementation approach:
+  1. Build a normal search URL directly from user inputs.
+  2. GET that page with realistic headers:
+     - `User-Agent`
+     - `Accept`
+     - `Accept-Language`
+  3. Extract the CSRF token from the HTML.
+  4. Resolve destination metadata automatically whenever possible so the user can pass a normal destination string like `Paris`.
+  5. POST to `https://www.booking.com/dml/graphql` with:
+     - `Content-Type: application/json`
+     - `Origin: https://www.booking.com`
+     - `Referer` matching a valid search URL
+     - `X-Booking-CSRF-Token`
+     - realistic `User-Agent`
+  6. Use the captured GraphQL operation and variables for the full hotel search flow.
+  7. Parse the JSON at the real response path you verify live. Research suggests it may be under something like:
+     - `data.searchQueries.search.results`
+     but do not hardcode this blindly without verifying.
+  8. Normalize the response into a stable top-level JSON structure for CLI output.
+
+  Live research hints to verify, not assume:
+  - The GraphQL operation may be `FullSearch`.
+  - Variables may include destination type/id, check-in/check-out, adults, rooms, pagination offset, and similar search options.
+  - Search result objects may expose fields for:
+    - property name
+    - property ID
+    - star rating
+    - review score and count
+    - address and city
+    - distance from center
+    - pricing and currency
+    - photos
+    - accommodation type
+    - latitude/longitude
+  - The initial search page URL likely accepts direct params such as:
+    - `ss`
+    - `checkin`
+    - `checkout`
+    - `group_adults`
+    - `no_rooms`
+    - `selected_currency`
+    - `order`
+    - `offset`
+    - `nflt`
+  - Verify all of this against the live site before locking the CLI surface.
+
+  CLI surface:
+  Keep the primary surface simple. Users should not need Booking-specific IDs or internal flags for normal searches.
+
+  Required commands:
+  - `search`
+    - Main command.
+    - Must work from normal user input without exposing CSRF or GraphQL details.
+    - Primary required flags:
+      - `--destination TEXT`
+      - `--checkin YYYY-MM-DD`
+      - `--checkout YYYY-MM-DD`
+      - `--adults INTEGER`
+      - `--rooms INTEGER`
+    - Useful optional flags:
+      - `--children INTEGER`
+      - `--currency TEXT`
+      - `--sort TEXT`
+      - `--limit INTEGER`
+      - `--page INTEGER`
+      - `--min-review-score NUMBER`
+      - `--stars INTEGER` (repeatable if useful)
+      - `--raw`
+  - `resolve-destination`
+    - Optional utility command if destination resolution becomes a meaningful standalone feature.
+    - Only add this if it is genuinely useful and based on real observed Booking behavior.
+  - `raw`
+    - Optional utility command or `--raw` flag for dumping the unnormalized GraphQL response for debugging.
+    - Keep it separate from normal human output if you add it.
+
+  Advanced/debug flags:
+  These may exist, but they must not be required for a normal search:
+  - `--dest-id TEXT`
+  - `--dest-type TEXT`
+
+  Do not invent extra commands unless they are justified by the real API behavior.
+
+  Required global flags:
+  - `--help`
+  - `--version`
+  - `--json`
+  - `--config <path>`
+
+  Validation rules:
+  - Validate dates and date order locally.
+  - Validate mutually exclusive flags.
+  - Require enough destination information to build a real request.
+  - Enforce positive counts for adults/rooms.
+  - Enforce pagination limits locally.
+  - Print validation errors to stderr and exit non-zero.
+  - Prefer user-friendly validation messages over leaking internal API terminology.
+
+  Output rules:
+  - Default stdout should be readable by humans.
+  - `--json` output must be stable and documented.
+  - Print only data to stdout.
+  - Print errors to stderr.
+  - Exit `0` on success and non-zero on failure.
+  - No prompts.
+  - No silent writes to disk.
+  - No background caching unless explicitly documented and user-controlled.
+
+  Stable JSON shape:
+  Design a stable output contract like:
+  - `query`
+  - `pagination`
+  - `results`
+  - `meta`
+
+  For each result, normalize to consistent fields such as:
+  - `property_id`
+  - `name`
+  - `url`
+  - `stars`
+  - `review_score`
+  - `review_count`
+  - `address`
+  - `city`
+  - `distance_to_center`
+  - `price`
+  - `currency`
+  - `price_display`
+  - `accommodation_type`
+  - `coordinates`
+  - `photos`
+  - `raw`
+
+  Preserve useful raw values when helpful, but keep the top-level structure deterministic.
+
+  Human-readable output:
+  - Default `search` output should render a readable table.
+  - Show the key columns users actually care about:
+    - hotel name
+    - city / area
+    - price
+    - rating / reviews
+    - stars
+    - distance from center
+    - type
+    - URL
+  - Handle missing fields gracefully.
+  - Avoid noisy walls of text.
+
+  Config:
+  Support env vars and optional TOML config file.
+  Use a consistent prefix like `BOOKING_CLI_`.
+
+  Suggested env vars:
+  - `BOOKING_CLI_USER_AGENT`
+  - `BOOKING_CLI_LANGUAGE`
+  - `BOOKING_CLI_CURRENCY`
+  - `BOOKING_CLI_ADULTS`
+  - `BOOKING_CLI_ROOMS`
+  - `BOOKING_CLI_TIMEOUT`
+  - `BOOKING_CLI_CONFIG`
+
+  Package layout:
+  - `pyproject.toml`
+  - `README.md`
+  - `src/<package>/cli.py`
+  - `src/<package>/config.py`
+  - `src/<package>/client.py`
+  - `src/<package>/graphql.py`
+  - `src/<package>/formatter.py`
+  - `src/<package>/models.py` if useful
+  - `tests/`
+
+  Implementation details:
+  - Store the GraphQL query document as a checked-in asset or module constant, not inline across the codebase.
+  - Separate:
+    - search URL builder
+    - CSRF extractor
+    - destination resolution
+    - headers builder
+    - GraphQL payload builder
+    - response parser
+  - Use typed helper functions and keep parsing code defensive.
+  - Prefer small, reviewable modules over one giant script.
+  - If internal destination resolution is hard to make robust, build the simplest reliable automatic approach first, then expose `--dest-id` / `--dest-type`
+  only as an advanced override.
+
+  Testing:
+  Add tests for:
+  - argument parsing
+  - config/env precedence
+  - search URL construction
+  - CSRF token extraction from fixture HTML
+  - destination resolution logic
+  - GraphQL payload construction
+  - response normalization from fixture JSON
+  - error handling for 401/403 refresh-and-retry
+  - JSON output stability
+  - main CLI flows with mocked `httpx` responses
+  - at least one regression test for a response-shape change or missing-field edge case you discover
+
+  Fixtures:
+  - Check in a small sanitized HTML fixture containing a CSRF token example
+  - Check in one or more sanitized GraphQL JSON fixtures
+  - Use those fixtures for parser tests
+  - If live smoke tests are added, make them opt-in and skipped by default
+
+  Help and docs:
+  - Every command must include examples in `--help`
+  - Add a concise README with:
+    - install
+    - config
+    - usage examples
+    - note that the CLI depends on an internal Booking.com API that may change
+    - note what was verified live vs what is mocked in tests
+  - Make the docs show the simple UX first. Do not lead with CSRF, GraphQL, or internal IDs.
+
+  Manual verification after implementation:
+  1. Run the full test suite.
+  2. Run root `--help` and every command `--help`.
+  3. Run at least one real search end-to-end if network access is available.
+  4. Verify human output and `--json` output for the live search.
+  5. Verify CSRF refresh handling logic.
+  6. Show the final usage examples and clearly say what was live-tested versus mocked.
+
+  Behavioral guidance:
+  - Keep dependencies minimal.
+  - Keep command names obvious.
+  - Keep output deterministic.
+  - Do not expose undocumented behavior unless you verified it.
+  - Do not silently scrape HTML as the main path if GraphQL fails. Fail clearly, or make HTML parsing an explicit fallback/debug mode.
+  - The primary product is a reliable CLI, not a scraping demo.
+
+  Deliverables:
+  - working CLI
+  - tests
+  - README
+  - examples in help output
+  - final summary including:
+    - command list
+    - config/env support
+    - test results
+    - final usage examples
+    - live verification notes

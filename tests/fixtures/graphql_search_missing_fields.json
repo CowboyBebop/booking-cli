@@ -1,0 +1,22 @@
+{
+  "data": {
+    "searchQueries": {
+      "search": {
+        "results": [
+          {
+            "basicPropertyData": {
+              "id": "999",
+              "location": {
+                "city": "Paris"
+              },
+              "pageName": "hotel/fr/minimal.html"
+            },
+            "displayName": {
+              "text": "Minimal Stay"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

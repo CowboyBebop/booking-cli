@@ -1,0 +1,118 @@
+{
+  "data": {
+    "searchQueries": {
+      "search": {
+        "pagination": {
+          "nbResultsPerPage": 2,
+          "nbResultsTotal": 87
+        },
+        "searchMeta": {
+          "destId": "-1456928",
+          "destType": "city",
+          "dates": {
+            "checkin": "2026-04-01",
+            "checkout": "2026-04-03",
+            "lengthOfStayInDays": 2
+          },
+          "nbAdults": 2,
+          "nbChildren": 0,
+          "nbRooms": 1
+        },
+        "results": [
+          {
+            "basicPropertyData": {
+              "id": "123",
+              "accommodationTypeId": "hotel",
+              "location": {
+                "address": "1 Rue Example",
+                "city": "Paris",
+                "countryCode": "fr"
+              },
+              "pageName": "/hotel/fr/example-paris.html",
+              "photos": {
+                "main": {
+                  "highResUrl": {
+                    "relativeUrl": "/images/example-high.jpg"
+                  },
+                  "lowResUrl": {
+                    "relativeUrl": "/images/example-low.jpg"
+                  }
+                }
+              },
+              "reviewScore": {
+                "score": 8.8,
+                "reviewCount": 1234
+              },
+              "starRating": {
+                "value": 4
+              }
+            },
+            "displayName": {
+              "text": "Hotel Example Paris"
+            },
+            "location": {
+              "mainDistance": "550 m from center",
+              "geoDistanceMeters": 550
+            },
+            "priceDisplayInfoIrene": {
+              "displayPrice": {
+                "copy": {
+                  "translation": "EUR 210"
+                },
+                "amountPerStay": {
+                  "amount": 210,
+                  "currency": "EUR"
+                }
+              }
+            },
+            "blocks": [
+              {
+                "finalPrice": {
+                  "amount": 210,
+                  "currency": "EUR"
+                }
+              }
+            ],
+            "description": {
+              "text": "Central hotel"
+            }
+          },
+          {
+            "basicPropertyData": {
+              "id": "456",
+              "accommodationTypeId": "apartment",
+              "location": {
+                "address": "99 Quiet Street",
+                "city": "Paris",
+                "countryCode": "fr"
+              },
+              "pageName": "/hotel/fr/example-apartment.html",
+              "reviewScore": {
+                "score": 9.2,
+                "reviewCount": 245
+              },
+              "starRating": {
+                "value": 5
+              }
+            },
+            "displayName": {
+              "text": "Apartment Example"
+            },
+            "location": {
+              "mainDistance": "1.2 km from center",
+              "geoDistanceMeters": 1200
+            },
+            "blocks": [
+              {
+                "finalPrice": {
+                  "amount": 320,
+                  "currency": "EUR"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

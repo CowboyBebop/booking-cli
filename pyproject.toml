@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68", "wheel>=0.46"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "booking-cli"
+version = "0.1.0"
+description = "Agent-friendly Booking.com hotel search CLI."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "click>=8.1,<9",
+  "rich>=13,<15",
+  "httpx[http2]>=0.27,<1",
+  "playwright>=1.40,<2",
+]
+
+[project.scripts]
+booking-cli = "booking_cli.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

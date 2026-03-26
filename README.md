@@ -1,0 +1,181 @@
+# booking-cli
+
+`booking-cli` is a scriptable CLI for Booking.com hotel search that keeps the internal request flow behind a simple command surface.
+
+Normal usage:
+
+```bash
+booking-cli search --destination "Paris" --checkin 2026-04-01 --checkout 2026-04-03 --adults 2 --rooms 1
+booking-cli --json search --destination "Paris" --checkin 2026-04-01 --checkout 2026-04-03 --adults 2 --rooms 1
+```
+
+It is built around Booking.com's internal GraphQL flow:
+
+1. resolve a destination string into Booking metadata
+2. reuse a cached Booking session when it is still fresh
+3. fetch a Booking search page when the cache is missing or stale
+4. extract the CSRF token from HTML
+5. POST to `https://www.booking.com/dml/graphql`
+6. normalize the response into stable CLI output
+
+If Booking blocks the plain HTML fetch with an anti-bot challenge, the CLI can fall back to browser bootstrap, cache the resulting CSRF token and cookies, and reuse that session for a short period across separate CLI runs.
+
+## Install
+
+Editable install for local development:
+
+```bash
+python3 -m pip install -e .
+```
+
+Regular install:
+
+```bash
+python3 -m pip install .
+```
+
+The package now depends on Playwright for browser bootstrap. Browser bootstrap runs headlessly by default. On Windows it tries to use the installed Edge channel first. If that is unavailable, it can install a Playwright-managed Chromium build on demand.
+
+Run without installing:
+
+```bash
+PYTHONPATH="src:.vendor" python3 -m booking_cli --help
+```
+
+Repo-local launchers:
+
+```bash
+./booking-cli --help
+booking-cli.cmd --help
+```
+
+The shell launcher is for WSL/Linux-style shells. The `.cmd` launcher is for Windows shells. Both prepend `src` and `.vendor` to `PYTHONPATH`, matching the local-repo pattern used by `kiwi-cli`.
+
+## Commands
+
+- `search`
+- `resolve-destination`
+
+## Usage
+
+Basic search:
+
+```bash
+booking-cli search \
+  --destination "Paris" \
+  --checkin 2026-04-01 \
+  --checkout 2026-04-03 \
+  --adults 2 \
+  --rooms 1
+```
+
+Search with filters and JSON output:
+
+```bash
+booking-cli --json search \
+  --destination "Rome" \
+  --checkin 2026-05-10 \
+  --checkout 2026-05-13 \
+  --adults 2 \
+  --rooms 1 \
+  --sort price \
+  --min-review-score 8.0 \
+  --stars 4 \
+  --stars 5
+```
+
+Resolve a destination first:
+
+```bash
+booking-cli resolve-destination --query "Paris"
+booking-cli --json resolve-destination --query "Mallorca" --limit 3
+```
+
+## Environment variables
+
+These override config file values:
+
+- `BOOKING_CLI_BASE_URL`
+- `BOOKING_CLI_AUTOCOMPLETE_URL`
+- `BOOKING_CLI_USER_AGENT`
+- `BOOKING_CLI_LANGUAGE`
+- `BOOKING_CLI_CURRENCY`
+- `BOOKING_CLI_ADULTS`
+- `BOOKING_CLI_ROOMS`
+- `BOOKING_CLI_TIMEOUT`
+- `BOOKING_CLI_AID`
+- `BOOKING_CLI_CONFIG`
+- `BOOKING_CLI_SESSION_CACHE`
+- `BOOKING_CLI_SESSION_TTL_MINUTES`
+- `BOOKING_CLI_BROWSER_BOOTSTRAP`
+- `BOOKING_CLI_BROWSER_HEADLESS`
+- `BOOKING_CLI_BROWSER_TIMEOUT`
+- `BOOKING_CLI_BROWSER_CHANNEL`
+- `BOOKING_CLI_BROWSER_AUTO_INSTALL`
+
+## Optional config file
+
+Pass `--config path/to/booking-cli.toml` or set `BOOKING_CLI_CONFIG`.
+
+Example:
+
+```toml
+base_url = "https://www.booking.com"
+aid = 304142
+session_ttl_minutes = 10
+browser_bootstrap = true
+browser_headless = true
+
+[defaults]
+language = "en-gb"
+currency = "EUR"
+adults = 2
+rooms = 1
+timeout = 20
+```
+
+By default the cached session is stored in the platform state directory for `booking-cli`. It contains Booking cookies and the last CSRF token, so treat it as local credential material.
+
+## Stable JSON output
+
+`--json` emits a deterministic top-level shape:
+
+- `query`
+- `pagination`
+- `results`
+- `meta`
+
+Each result is normalized to fields such as:
+
+- `property_id`
+- `name`
+- `url`
+- `stars`
+- `review_score`
+- `review_count`
+- `address`
+- `city`
+- `distance_to_center`
+- `distance_to_center_meters`
+- `price`
+- `currency`
+- `price_display`
+- `accommodation_type`
+- `coordinates`
+- `photos`
+
+## Live verification notes
+
+What was verified live on March 17, 2026:
+
+- Booking destination autocomplete responded successfully from this environment
+- Booking GraphQL endpoint responded successfully from this environment
+- Booking search HTML from this environment returned Booking's AWS WAF challenge page instead of a normal page with an extractable CSRF token
+
+That means the end-to-end `search` flow is implemented, but full live verification from this environment was incomplete because Booking blocked the page fetch step.
+
+## Tests
+
+```bash
+PYTHONPATH="src:.vendor" python3 -m unittest discover -s tests -v
+```

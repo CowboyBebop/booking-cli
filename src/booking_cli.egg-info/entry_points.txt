@@ -1,0 +1,2 @@
+[console_scripts]
+booking-cli = booking_cli.cli:main
