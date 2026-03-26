@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from datetime import date
+from pathlib import Path
 from unittest import TestCase
 from unittest.mock import patch
+import tempfile
 import json
 
 from click.testing import CliRunner
@@ -143,6 +145,37 @@ class CliTests(TestCase):
         payload = json.loads(result.output)
         self.assertEqual(payload["count"], 2)
         self.assertEqual(payload["results"][0]["dest_id"], "-1456928")
+
+    def test_search_json_output_can_write_to_file(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_path = Path(temp_dir) / "search.json"
+            with patch("booking_cli.cli.BookingClient", FakeClient):
+                result = self.runner.invoke(
+                    cli,
+                    [
+                        "--json",
+                        "--out",
+                        str(output_path),
+                        "search",
+                        "--destination",
+                        "Paris",
+                        "--checkin",
+                        "2026-04-01",
+                        "--checkout",
+                        "2026-04-03",
+                        "--adults",
+                        "2",
+                        "--rooms",
+                        "1",
+                        "--sort",
+                        "price",
+                    ],
+                )
+            self.assertEqual(result.exit_code, 0, result.output)
+            self.assertEqual(result.output, "")
+            payload = json.loads(output_path.read_text(encoding="utf-8"))
+        self.assertEqual(payload["query"]["destination"], "Paris")
+        self.assertEqual(payload["results"][0]["name"], "Hotel Example Paris")
 
     def test_validation_requires_destination_or_override(self) -> None:
         result = self.runner.invoke(

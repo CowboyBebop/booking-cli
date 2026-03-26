@@ -40,9 +40,15 @@ SORT_CHOICES = ("default", "price", "review-score", "distance", "stars", "name")
     is_flag=True,
     help="Emit stable JSON suitable for scripts and agents.",
 )
+@click.option(
+    "--out",
+    "output_path",
+    type=click.Path(dir_okay=False, path_type=Path),
+    help="Write final output to a file instead of stdout.",
+)
 @click.version_option(__version__, prog_name="booking-cli")
 @click.pass_context
-def cli(ctx: click.Context, config_arg: Path | None, output_json: bool) -> None:
+def cli(ctx: click.Context, config_arg: Path | None, output_json: bool, output_path: Path | None) -> None:
     """Search Booking.com hotels without exposing GraphQL or CSRF details."""
     try:
         settings = load_settings(config_path_from_sources(str(config_arg) if config_arg else None))
@@ -52,6 +58,7 @@ def cli(ctx: click.Context, config_arg: Path | None, output_json: bool) -> None:
     ctx.ensure_object(dict)
     ctx.obj["settings"] = settings
     ctx.obj["output_json"] = output_json
+    ctx.obj["output_path"] = output_path
 
 
 @cli.command(
@@ -144,14 +151,14 @@ def search(
         client.close()
 
     if raw:
-        click.echo(json.dumps(response.raw_response, indent=2, sort_keys=True))
+        _emit_output(ctx, json.dumps(response.raw_response, indent=2, sort_keys=True), nl=True)
         return
 
     if ctx.obj["output_json"]:
-        click.echo(json.dumps(response.to_dict(), indent=2, sort_keys=True))
+        _emit_output(ctx, json.dumps(response.to_dict(), indent=2, sort_keys=True), nl=True)
         return
 
-    click.echo(render_search(response), nl=False)
+    _emit_output(ctx, render_search(response), nl=False)
 
 
 @cli.command(
@@ -184,14 +191,24 @@ def resolve_destination(ctx: click.Context, query: str, limit: int) -> None:
             "count": len(destinations),
             "results": [item.to_dict() for item in destinations],
         }
-        click.echo(json.dumps(payload, indent=2, sort_keys=True))
+        _emit_output(ctx, json.dumps(payload, indent=2, sort_keys=True), nl=True)
         return
 
-    click.echo(render_destinations(query, destinations), nl=False)
+    _emit_output(ctx, render_destinations(query, destinations), nl=False)
 
 
 def main() -> None:
     cli(obj={})
+
+
+def _emit_output(ctx: click.Context, content: str, *, nl: bool) -> None:
+    output_path = ctx.obj.get("output_path")
+    if output_path is None:
+        click.echo(content, nl=nl)
+        return
+    final_content = content if not nl or content.endswith("\n") else f"{content}\n"
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(final_content, encoding="utf-8")
 
 
 def _build_search_request(
